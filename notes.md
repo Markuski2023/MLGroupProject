@@ -17,3 +17,20 @@
 ### Hvordan ta høyde for forskjell mellom estimert vær og observert vær
 - Legge til boolean feature for om en rad er estimert eller observert vær
 - Tenke på hvordan validation set skal lages
+
+### Estimert vær har data for hvert kvarter
+Vi bør på en eller annen måte utnytte all dataen. Det gjør vi ikke nå
+- gjennomsnitt
+- ignorere
+- droppe ytterpunkter
+
+### Forberede data
+Det er masse hull i dataen. (spesielt 'pv_measurement' i B og C)
+- droppe data som er dårlig (ikke finnes eller unaturlig)
+- erstatte data med en skalert verdi av A sin data
+- interpolere
+
+### Bør prøves ut
+- Fjerne features som er dårlig estimert
+- gjenomsnitt av værmeldingen for den timen
+- bedre handling av dårlig data i B-sett og C-sett (ikke bare gjenomsnitt)
