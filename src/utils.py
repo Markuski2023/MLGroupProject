@@ -1,6 +1,12 @@
 import pandas as pd
 from sklearn.impute import SimpleImputer
 from autogluon.tabular import TabularPredictor
+from sklearn.metrics import mean_absolute_error
+
+def remove_unwanted_rows(df):
+    unwanted_rows = (df['direct_rad:W'] == 0) & (df['diffuse_rad:W'] == 0) & (df['pv_measurement'] > 200 & (df['sun_elevation:d'] < 0) & (df['is_day:idx'] == 0))
+    cleaned_df = df[~unwanted_rows]
+    return cleaned_df
 def remove_highly_correlated_features(df, threshold):
     # Compute the Pearson correlation matrix
     correlation_matrix = df.corr(method='pearson')
