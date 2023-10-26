@@ -64,8 +64,49 @@ def lag_features_by_one_hour(df, column_names):
 
     return df
 
+def split_df_on_date(df, date_as_string):
+    df['time'] = pd.to_datetime(df['time'])
+
+    first_df = df[df['time'] < date_as_string]
+    second_df = df[df['time'] >= date_as_string]
+
+    return first_df, second_df
+
+def split_df_on_ratio(df, ratio, random=False):
+    if random:
+        df = df.sample(frac=1).reset_index(drop=True)
+    split_index = int(len(df) * ratio)
+    df1 = df.iloc[:split_index]
+    df2 = df.iloc[split_index:]
+
+    return df1, df2  
+
 def is_estimated(df):
     split_date = '2022-10-27'
     df['is_estimated'] = 0  # Initialize with 0 (indicating observed)
     df.loc[df['time'] >= pd.Timestamp(split_date), 'is_estimated'] = 1  # Set 1 for estimated data
+    return df
+
+def mean_of_the_hour(df):
+    # Ensure 'time' column is a datetime object
+    df['time'] = pd.to_datetime(df['time'])
+    
+    # Get number of rows
+    n_rows = len(df)
+    
+    # Iterate through rows
+    i = 0
+    while i < n_rows - 3: # Subtract 3 to avoid index out of range
+        current_time = df.iloc[i]['time']
+        # Check if current row's time is a full hour
+        if current_time.minute == 0 and current_time.second == 0:
+            # Check next three rows
+            next_three_rows = df.iloc[i+1:i+4]
+            if not all(next_three_rows['time'].dt.minute == 0) or not all(next_three_rows['time'].dt.second == 0):
+                # Compute the mean only for numeric columns
+                mean_values = next_three_rows.select_dtypes(include=['float64', 'int64']).mean()
+                for col in mean_values.index:
+                    df.at[i, col] = mean_values[col]
+        i += 1
+    
     return df
