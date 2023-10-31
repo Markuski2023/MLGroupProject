@@ -104,30 +104,127 @@ def resample_to_hourly(df, datetime_column='date_forecast'):
 
     return df_hourly
 
-def add_weather_indicators(df, target_variable='pv_measurement'):
-    """
-    Add weather indicators as binary features for extreme weather conditions.
-    'High' and 'Low' indicators are created based on one standard deviation from the mean.
-    The function automatically excludes the target variable from consideration.
-    """
-    all_features = [col for col in df.columns if col != target_variable]
+def generate_solar_features_1(data):
+    relevant_features = [
+        'direct_rad:W', 'clear_sky_rad:W', 'diffuse_rad:W', 'sun_elevation:d', 'sun_azimuth:d',
+        'clear_sky_energy_1h:J', 'direct_rad_1h:J', 'effective_cloud_cover:p', 'diffuse_rad_1h:J',
+        'is_in_shadow:idx', 'total_cloud_cover:p', 'wind_speed_u_10m:ms', 'snow_water:kgm2',
+        'relative_humidity_1000hPa:p', 'is_day:idx', 'wind_speed_v_10m:ms', 'cloud_base_agl:m',
+        'fresh_snow_24h:cm', 'wind_speed_10m:ms', 'pressure_100m:hPa'
+    ]
 
-    for feature in all_features:
-        std_dev = df[feature].std()
-        mean_val = df[feature].mean()
-        df[f'{feature}_high'] = (df[feature] > mean_val + std_dev).astype(int)
-        df[f'{feature}_low'] = (df[feature] < mean_val - std_dev).astype(int)
-    return df
+    interactions = {}
+    ratios = {}
+    differences = {}
+    lags = {}
+    self_interactions = {}
 
-def feature_engineering_1(df):
-    df['radiation_ratio'] = df['direct_rad:W'] / (df['diffuse_rad:W'] + 1e-6)
-    df['cloud_rad_interaction'] = df['effective_cloud_cover:p'] * (df['direct_rad:W'] + df['diffuse_rad:W'])
+    for col_pair in itertools.combinations(relevant_features, 2):
+        interactions[f'{col_pair[0]}_times_{col_pair[1]}'] = data[col_pair[0]] * data[col_pair[1]]
+        ratios[f'{col_pair[0]}_div_{col_pair[1]}'] = data[col_pair[0]] / (data[col_pair[1]] + 1e-8)
+        differences[f'{col_pair[0]}_minus_{col_pair[1]}'] = data[col_pair[0]] - data[col_pair[1]]
+        self_interactions[f'{col_pair[0]}_squared'] = data[col_pair[0]] ** 2
 
-    df['wind_magnitude'] = np.sqrt(df['wind_speed_u_10m:ms']**2 + df['wind_speed_v_10m:ms']**2)
-    df['wind_direction'] = np.arctan2(df['wind_speed_v_10m:ms'], df['wind_speed_u_10m:ms'])
+    # Creating lags for all relevant features
+    for col in relevant_features:
+        lags[f'{col}_lag1'] = data[col].shift(1)
+        lags[f'{col}_lag2'] = data[col].shift(3)
+        lags[f'{col}_lag3'] = data[col].shift(6)
 
-    df['solar_angle_impact'] = np.sin(np.radians(df['sun_elevation:d']))
+    # Concatenate all new features with the original data
+    data = pd.concat([data, pd.DataFrame(interactions), pd.DataFrame(ratios),
+                      pd.DataFrame(differences), pd.DataFrame(lags), pd.DataFrame(self_interactions)], axis=1)
 
-    df = add_weather_indicators(df)
+    data['wind_magnitude'] = np.sqrt(data['wind_speed_u_10m:ms']**2 + data['wind_speed_v_10m:ms']**2)
+    data['wind_direction'] = np.arctan2(data['wind_speed_v_10m:ms'], data['wind_speed_u_10m:ms'])
+    data['solar_angle_impact'] = np.sin(np.radians(data['sun_elevation:d']))
 
-    return df
+    return data
+
+def generate_solar_features_2(data):
+    relevant_features = [
+        'clear_sky_rad:W', 'sun_elevation:d', 'direct_rad:W', 'diffuse_rad:W',
+        'sun_azimuth:d', 'clear_sky_energy_1h:J', 'cloud_base_agl:m', 'effective_cloud_cover:p',
+        'diffuse_rad_1h:J', 'snow_water:kgm2', 'ceiling_height_agl:m', 'total_cloud_cover:p',
+        'direct_rad_1h:J'
+    ]
+
+    interactions = {}
+    ratios = {}
+    differences = {}
+    lags = {}
+    self_interactions = {}
+
+    for col_pair in itertools.combinations(relevant_features, 2):
+        interactions[f'{col_pair[0]}_times_{col_pair[1]}'] = data[col_pair[0]] * data[col_pair[1]]
+        ratios[f'{col_pair[0]}_div_{col_pair[1]}'] = data[col_pair[0]] / (data[col_pair[1]] + 1e-8)
+        differences[f'{col_pair[0]}_minus_{col_pair[1]}'] = data[col_pair[0]] - data[col_pair[1]]
+        self_interactions[f'{col_pair[0]}_squared'] = data[col_pair[0]] ** 2
+
+    # Creating lags for all relevant features
+    for col in relevant_features:
+        lags[f'{col}_lag1'] = data[col].shift(1)
+        lags[f'{col}_lag2'] = data[col].shift(3)
+        lags[f'{col}_lag3'] = data[col].shift(6)
+
+    # Concatenate all new features with the original data
+    data = pd.concat([data, pd.DataFrame(interactions), pd.DataFrame(ratios),
+                      pd.DataFrame(differences), pd.DataFrame(lags), pd.DataFrame(self_interactions)], axis=1)
+
+    data['wind_magnitude'] = np.sqrt(data['wind_speed_u_10m:ms']**2 + data['wind_speed_v_10m:ms']**2)
+    data['wind_direction'] = np.arctan2(data['wind_speed_v_10m:ms'], data['wind_speed_u_10m:ms'])
+    data['solar_angle_impact'] = np.sin(np.radians(data['sun_elevation:d']))
+
+    return data
+
+def generate_solar_features_3(data):
+    relevant_features = [
+        'direct_rad:W', 'clear_sky_rad:W', 'diffuse_rad:W', 'sun_elevation:d', 'sun_azimuth:d',
+        'clear_sky_energy_1h:J', 'direct_rad_1h:J', 'effective_cloud_cover:p', 'diffuse_rad_1h:J',
+        'is_in_shadow:idx', 'total_cloud_cover:p', 'wind_speed_u_10m:ms', 'snow_water:kgm2',
+        'relative_humidity_1000hPa:p', 'is_day:idx', 'wind_speed_v_10m:ms', 'cloud_base_agl:m',
+        'fresh_snow_24h:cm', 'wind_speed_10m:ms', 'pressure_100m:hPa'
+    ]
+
+    interactions = {}
+    ratios = {}
+    differences = {}
+    lags = {}
+    self_interactions = {}
+
+    for col_pair in itertools.combinations(relevant_features, 2):
+        interactions[f'{col_pair[0]}_times_{col_pair[1]}'] = data[col_pair[0]] * data[col_pair[1]]
+        ratios[f'{col_pair[0]}_div_{col_pair[1]}'] = data[col_pair[0]] / (data[col_pair[1]] + 1e-8)
+        differences[f'{col_pair[0]}_minus_{col_pair[1]}'] = data[col_pair[0]] - data[col_pair[1]]
+        self_interactions[f'{col_pair[0]}_squared'] = data[col_pair[0]] ** 2
+
+    # Creating lags for all relevant features
+    for col in relevant_features:
+        lags[f'{col}_lag1'] = data[col].shift(1)
+        lags[f'{col}_lag2'] = data[col].shift(3)
+        lags[f'{col}_lag3'] = data[col].shift(6)
+
+    # Concatenate all new features with the original data
+    data = pd.concat([data, pd.DataFrame(interactions), pd.DataFrame(ratios),
+                      pd.DataFrame(differences), pd.DataFrame(lags), pd.DataFrame(self_interactions)], axis=1)
+
+    data['wind_magnitude'] = np.sqrt(data['wind_speed_u_10m:ms']**2 + data['wind_speed_v_10m:ms']**2)
+    data['wind_direction'] = np.arctan2(data['wind_speed_v_10m:ms'], data['wind_speed_u_10m:ms'])
+    data['solar_angle_impact'] = np.sin(np.radians(data['sun_elevation:d']))
+
+    return data
+
+def closest_impute(series):
+
+    ffill = series.fillna(method='ffill')
+    bfill = series.fillna(method='bfill')
+
+    # Calculate the distances to the nearest non-NaN values
+    ffill_dist = series.index.to_series().fillna(method='ffill') - series.index.to_series()
+    bfill_dist = series.index.to_series().fillna(method='bfill') - series.index.to_series()
+
+    # Where the forward fill distance is smaller or equal, use ffill, otherwise use bfill
+    combined = np.where(ffill_dist <= bfill_dist, ffill, bfill)
+
+    return combined
+
