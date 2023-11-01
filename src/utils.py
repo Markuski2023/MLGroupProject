@@ -3,6 +3,7 @@ from sklearn.impute import SimpleImputer
 from autogluon.tabular import TabularPredictor
 from sklearn.metrics import mean_absolute_error
 import numpy as np
+import itertools
 
 def remove_unwanted_rows(df):
     unwanted_rows = (df['direct_rad:W'] == 0) & (df['diffuse_rad:W'] == 0) & (df['pv_measurement'] > 200) & (df['sun_elevation:d'] < 0) & (df['is_day:idx'] == 0)
@@ -78,7 +79,7 @@ def lag_features_by_one_hour(df, column_names, time_col='time'):
     # Loop through each column name to create a lagged feature
     for col in column_names:
         lagged_col_name = f"{col}"
-        df[lagged_col_name] = df[col].shift(freq='1H')
+        df[lagged_col_name] = df[col].shift(freq='-1H')
 
     return df
 
@@ -91,8 +92,6 @@ def is_estimated(df, time_col='time'):
 def resample_to_hourly(df, datetime_column='date_forecast'):
     df[datetime_column] = pd.to_datetime(df[datetime_column])
     df.sort_values(by=datetime_column, inplace=True)
-
-    df.drop_duplicates(subset=[datetime_column], keep='first', inplace=True)
 
     df.set_index(datetime_column, inplace=True)
 
@@ -118,22 +117,25 @@ def generate_solar_features_1(data):
     differences = {}
     lags = {}
     self_interactions = {}
+    additive = {}
 
     for col_pair in itertools.combinations(relevant_features, 2):
         interactions[f'{col_pair[0]}_times_{col_pair[1]}'] = data[col_pair[0]] * data[col_pair[1]]
         ratios[f'{col_pair[0]}_div_{col_pair[1]}'] = data[col_pair[0]] / (data[col_pair[1]] + 1e-8)
         differences[f'{col_pair[0]}_minus_{col_pair[1]}'] = data[col_pair[0]] - data[col_pair[1]]
-        self_interactions[f'{col_pair[0]}_squared'] = data[col_pair[0]] ** 2
+        additive[f'{col_pair[0]}_plus_{col_pair[1]}'] = data[col_pair[0]] + data[col_pair[1]]
+
+    for col in relevant_features:
+        self_interactions[f'{col}_squared'] = data[col] ** 2
 
     # Creating lags for all relevant features
     for col in relevant_features:
         lags[f'{col}_lag1'] = data[col].shift(1)
-        lags[f'{col}_lag2'] = data[col].shift(3)
-        lags[f'{col}_lag3'] = data[col].shift(6)
+        lags[f'{col}_lag3'] = data[col].shift(3)
 
     # Concatenate all new features with the original data
     data = pd.concat([data, pd.DataFrame(interactions), pd.DataFrame(ratios),
-                      pd.DataFrame(differences), pd.DataFrame(lags), pd.DataFrame(self_interactions)], axis=1)
+                      pd.DataFrame(differences), pd.DataFrame(lags), pd.DataFrame(self_interactions), pd.DataFrame(additive)], axis=1)
 
     data['wind_magnitude'] = np.sqrt(data['wind_speed_u_10m:ms']**2 + data['wind_speed_v_10m:ms']**2)
     data['wind_direction'] = np.arctan2(data['wind_speed_v_10m:ms'], data['wind_speed_u_10m:ms'])
@@ -143,10 +145,11 @@ def generate_solar_features_1(data):
 
 def generate_solar_features_2(data):
     relevant_features = [
-        'clear_sky_rad:W', 'sun_elevation:d', 'direct_rad:W', 'diffuse_rad:W',
-        'sun_azimuth:d', 'clear_sky_energy_1h:J', 'cloud_base_agl:m', 'effective_cloud_cover:p',
-        'diffuse_rad_1h:J', 'snow_water:kgm2', 'ceiling_height_agl:m', 'total_cloud_cover:p',
-        'direct_rad_1h:J'
+        'sun_elevation:d', 'clear_sky_rad:W', 'direct_rad:W', 'diffuse_rad:W',
+        'sun_azimuth:d', 'clear_sky_energy_1h:J', 'cloud_base_agl:m', 'diffuse_rad_1h:J',
+        'effective_cloud_cover:p', 'direct_rad_1h:J', 'snow_water:kgm2', 'is_in_shadow:idx',
+        'fresh_snow_24h:cm', 'wind_speed_u_10m:ms', 'total_cloud_cover:p', 'msl_pressure:hPa',
+        'is_day:idx', 'relative_humidity_1000hPa:p', 'pressure_100m:hPa', 'ceiling_height_agl:m'
     ]
 
     interactions = {}
@@ -154,22 +157,25 @@ def generate_solar_features_2(data):
     differences = {}
     lags = {}
     self_interactions = {}
+    additive = {}
 
     for col_pair in itertools.combinations(relevant_features, 2):
         interactions[f'{col_pair[0]}_times_{col_pair[1]}'] = data[col_pair[0]] * data[col_pair[1]]
         ratios[f'{col_pair[0]}_div_{col_pair[1]}'] = data[col_pair[0]] / (data[col_pair[1]] + 1e-8)
         differences[f'{col_pair[0]}_minus_{col_pair[1]}'] = data[col_pair[0]] - data[col_pair[1]]
-        self_interactions[f'{col_pair[0]}_squared'] = data[col_pair[0]] ** 2
+        additive[f'{col_pair[0]}_plus_{col_pair[1]}'] = data[col_pair[0]] + data[col_pair[1]]
+
+    for col in relevant_features:
+        self_interactions[f'{col}_squared'] = data[col] ** 2
 
     # Creating lags for all relevant features
     for col in relevant_features:
         lags[f'{col}_lag1'] = data[col].shift(1)
-        lags[f'{col}_lag2'] = data[col].shift(3)
-        lags[f'{col}_lag3'] = data[col].shift(6)
+        lags[f'{col}_lag3'] = data[col].shift(3)
 
     # Concatenate all new features with the original data
     data = pd.concat([data, pd.DataFrame(interactions), pd.DataFrame(ratios),
-                      pd.DataFrame(differences), pd.DataFrame(lags), pd.DataFrame(self_interactions)], axis=1)
+                      pd.DataFrame(differences), pd.DataFrame(lags), pd.DataFrame(self_interactions), pd.DataFrame(additive)], axis=1)
 
     data['wind_magnitude'] = np.sqrt(data['wind_speed_u_10m:ms']**2 + data['wind_speed_v_10m:ms']**2)
     data['wind_direction'] = np.arctan2(data['wind_speed_v_10m:ms'], data['wind_speed_u_10m:ms'])
@@ -179,11 +185,12 @@ def generate_solar_features_2(data):
 
 def generate_solar_features_3(data):
     relevant_features = [
-        'direct_rad:W', 'clear_sky_rad:W', 'diffuse_rad:W', 'sun_elevation:d', 'sun_azimuth:d',
-        'clear_sky_energy_1h:J', 'direct_rad_1h:J', 'effective_cloud_cover:p', 'diffuse_rad_1h:J',
-        'is_in_shadow:idx', 'total_cloud_cover:p', 'wind_speed_u_10m:ms', 'snow_water:kgm2',
-        'relative_humidity_1000hPa:p', 'is_day:idx', 'wind_speed_v_10m:ms', 'cloud_base_agl:m',
-        'fresh_snow_24h:cm', 'wind_speed_10m:ms', 'pressure_100m:hPa'
+        'clear_sky_rad:W', 'clear_sky_energy_1h:J', 'direct_rad_1h:J', 'sun_elevation:d',
+        'direct_rad:W', 'diffuse_rad:W', 'sun_azimuth:d', 'diffuse_rad_1h:J',
+        'air_density_2m:kgm3', 'wind_speed_v_10m:ms', 'fresh_snow_24h:cm',
+        'relative_humidity_1000hPa:p', 'total_cloud_cover:p', 'effective_cloud_cover:p',
+        'cloud_base_agl:m', 'snow_water:kgm2', 't_1000hPa:K', 'is_in_shadow:idx', 'dew_point_2m:K',
+        'pressure_100m:hPa'
     ]
 
     interactions = {}
@@ -191,22 +198,25 @@ def generate_solar_features_3(data):
     differences = {}
     lags = {}
     self_interactions = {}
+    additive = {}
 
     for col_pair in itertools.combinations(relevant_features, 2):
         interactions[f'{col_pair[0]}_times_{col_pair[1]}'] = data[col_pair[0]] * data[col_pair[1]]
         ratios[f'{col_pair[0]}_div_{col_pair[1]}'] = data[col_pair[0]] / (data[col_pair[1]] + 1e-8)
         differences[f'{col_pair[0]}_minus_{col_pair[1]}'] = data[col_pair[0]] - data[col_pair[1]]
-        self_interactions[f'{col_pair[0]}_squared'] = data[col_pair[0]] ** 2
+        additive[f'{col_pair[0]}_plus_{col_pair[1]}'] = data[col_pair[0]] + data[col_pair[1]]
+
+    for col in relevant_features:
+        self_interactions[f'{col}_squared'] = data[col] ** 2
 
     # Creating lags for all relevant features
     for col in relevant_features:
         lags[f'{col}_lag1'] = data[col].shift(1)
-        lags[f'{col}_lag2'] = data[col].shift(3)
-        lags[f'{col}_lag3'] = data[col].shift(6)
+        lags[f'{col}_lag3'] = data[col].shift(3)
 
     # Concatenate all new features with the original data
     data = pd.concat([data, pd.DataFrame(interactions), pd.DataFrame(ratios),
-                      pd.DataFrame(differences), pd.DataFrame(lags), pd.DataFrame(self_interactions)], axis=1)
+                      pd.DataFrame(differences), pd.DataFrame(lags), pd.DataFrame(self_interactions), pd.DataFrame(additive)], axis=1)
 
     data['wind_magnitude'] = np.sqrt(data['wind_speed_u_10m:ms']**2 + data['wind_speed_v_10m:ms']**2)
     data['wind_direction'] = np.arctan2(data['wind_speed_v_10m:ms'], data['wind_speed_u_10m:ms'])
@@ -227,4 +237,3 @@ def closest_impute(series):
     combined = np.where(ffill_dist <= bfill_dist, ffill, bfill)
 
     return combined
-
